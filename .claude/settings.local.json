@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__edebe537-b663-4b84-bbe7-49a1911aeb1c__notion-search",
+      "mcp__edebe537-b663-4b84-bbe7-49a1911aeb1c__notion-fetch",
+      "Bash(node server.js)",
+      "Read(//usr/local/**)",
+      "Read(//Users/colettewang/.nvm/versions/**)",
+      "Bash(command -v node)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}
