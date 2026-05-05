@@ -710,7 +710,7 @@ const DB = {
   },
   deleteWorkout(id) { this._set(KEYS.workouts, (this._get(KEYS.workouts)||[]).filter(x=>x.id!==id)); },
 
-  getSleepLogs() { return (this._get(KEYS.sleep)||[]).sort((a,b)=>b.date.localeCompare(a.date)); },
+  getSleepLogs() { return (this._get(KEYS.sleep)||[]).sort((a,b)=>new Date(b.date)-new Date(a.date)); },
   saveSleep(s) {
     const arr = this._get(KEYS.sleep) || [];
     const i = arr.findIndex(x=>x.id===s.id);
@@ -1041,7 +1041,15 @@ function submitWorkout() {
 
 function deleteWorkout(id) {
   if(!confirm('Delete this workout?'))return;
+  const entry = DB.getWorkouts().find(x=>x.id===id);
   DB.deleteWorkout(id); renderWorkoutHistory();
+  if (entry?.notionPageId) {
+    fetch('/api/notion-workout', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notionPageId: entry.notionPageId }),
+    }).catch(() => {});
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1110,7 +1118,7 @@ function setSleepTableYear(y){ sleepTableYear=y; renderSleepTable(); }
 
 function renderSleepTable() {
   const el=document.getElementById('sleep-body');
-  const allLogs=DB.getSleepLogs().slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const allLogs=DB.getSleepLogs().slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(!allLogs.length){
     el.innerHTML=`<div class="empty"><div class="empty-icon">${ICON_MOON}</div><p>No sleep logs yet.</p></div>`;
     return;
@@ -1303,7 +1311,15 @@ async function pushToNotion(type, data) {
 }
 function deleteSleep(id) {
   if(!confirm('Delete this sleep log?'))return;
+  const entry = DB.getSleepLogs().find(x=>x.id===id);
   DB.deleteSleep(id); renderSleepTable();
+  if (entry?.notionPageId) {
+    fetch('/api/notion-sleep', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notionPageId: entry.notionPageId }),
+    }).catch(() => {});
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1362,7 +1378,15 @@ function submitWeight(editId) {
 }
 function deleteWeight(id) {
   if(!confirm('Delete this entry?'))return;
+  const entry = DB.getWeights().find(x=>x.id===id);
   DB.deleteWeight(id); renderWeight();
+  if (entry?.notionPageId) {
+    fetch('/api/notion-weight', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notionPageId: entry.notionPageId }),
+    }).catch(() => {});
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1389,6 +1413,11 @@ async function loadFromNotion() {
       sleepRes.json(), workoutRes.json(), weightRes.json(),
     ]);
 
+    const notionSleepIds   = new Set(sleepEntries.map(e=>e.notionPageId));
+    const notionWorkoutIds = new Set(workoutEntries.map(e=>e.notionPageId));
+    const notionWeightIds  = new Set(weightEntries.map(e=>e.notionPageId));
+
+    // Add entries that exist in Notion but not locally
     const existingSleepIds   = new Set(DB.getSleepLogs().map(s=>s.notionPageId).filter(Boolean));
     const existingWorkoutIds = new Set(DB.getWorkouts().map(w=>w.notionPageId).filter(Boolean));
     const existingWeightIds  = new Set(DB.getWeights().map(w=>w.notionPageId).filter(Boolean));
@@ -1396,6 +1425,11 @@ async function loadFromNotion() {
     for (const e of sleepEntries)   if (!existingSleepIds.has(e.notionPageId))   DB.saveSleep({id:uid(),...e});
     for (const e of workoutEntries) if (!existingWorkoutIds.has(e.notionPageId)) DB.saveWorkout({id:uid(),...e});
     for (const e of weightEntries)  if (!existingWeightIds.has(e.notionPageId))  DB.saveWeight({id:uid(),...e});
+
+    // Remove local entries whose Notion page was deleted on another device
+    for (const s of DB.getSleepLogs())   if (s.notionPageId && !notionSleepIds.has(s.notionPageId))   DB.deleteSleep(s.id);
+    for (const w of DB.getWorkouts())    if (w.notionPageId && !notionWorkoutIds.has(w.notionPageId)) DB.deleteWorkout(w.id);
+    for (const w of DB.getWeights())     if (w.notionPageId && !notionWeightIds.has(w.notionPageId))  DB.deleteWeight(w.id);
   } catch(e) {
     console.warn('Notion load failed:', e);
   }
